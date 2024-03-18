@@ -284,42 +284,42 @@ common::DB_GPU *db_gpu;
 common::ExecInfo *exec_info;
 cudaEvent_t start1, mid1, stop1;
 
-struct AAA000
+struct TaskInfo
 {
     common::TransactionSet_CPU *txinfo;
     char *gpu_txs;
     char *gpu_gaccotxs;
     void *output;
 
-    AAA000() {}
-    AAA000(common::TransactionSet_CPU *txinfo,
-           char *gpu_txs,
-           char *gpu_gaccotxs,
-           void *output) : txinfo(txinfo), gpu_txs(gpu_txs), gpu_gaccotxs(gpu_gaccotxs), output(output) {}
+    TaskInfo() {}
+    TaskInfo(common::TransactionSet_CPU *txinfo,
+             char *gpu_txs,
+             char *gpu_gaccotxs,
+             void *output) : txinfo(txinfo), gpu_txs(gpu_txs), gpu_gaccotxs(gpu_gaccotxs), output(output) {}
 };
 
-struct AAAABBB
+struct ProgramInfo
 {
     common::ConcurrencyControlCPUBase *cc;
     CUdeviceptr cc_device_info;
     common::RTCProgram *program;
 
-    AAAABBB() {}
-    AAAABBB(common::ConcurrencyControlCPUBase *cc,
-            CUdeviceptr cc_device_info,
-            common::RTCProgram *program) : cc(cc), cc_device_info(cc_device_info), program(program) {}
+    ProgramInfo() {}
+    ProgramInfo(common::ConcurrencyControlCPUBase *cc,
+                CUdeviceptr cc_device_info,
+                common::RTCProgram *program) : cc(cc), cc_device_info(cc_device_info), program(program) {}
 };
 
-AAA000 *PaymentPre0();
-AAA000 *NewOrderPre0();
+TaskInfo *PaymentPre0();
+TaskInfo *NewOrderPre0();
 
-AAAABBB *Pre(AAA000 *aaa000)
+ProgramInfo *Pre(TaskInfo *task_info)
 {
     std::string path("./benchmark/tpcc.cu");
     std::string include_path("./include");
     common::ConcurrencyControlCPUBase *cc = nullptr;
-    common::TransactionSet_CPU *txinfo = aaa000->txinfo;
-    char *gpu_gacco_txs = aaa000->gpu_gaccotxs;
+    common::TransactionSet_CPU *txinfo = task_info->txinfo;
+    char *gpu_gacco_txs = task_info->gpu_gaccotxs;
 
     common::TSAllocator_CPU *ts_allocator = new common::NaiveTSAllocator_CPU();
     // common::TSAllocator_CPU *ts_allocator = new common::BatchedTSAllocator_CPU();
@@ -381,11 +381,11 @@ AAAABBB *Pre(AAA000 *aaa000)
     if (!program->Compile(opts))
         exit(1);
 
-    AAAABBB *ret = new AAAABBB(cc, cc_device_info, program);
+    ProgramInfo *ret = new ProgramInfo(cc, cc_device_info, program);
     return ret;
 }
 
-void Bench(AAAABBB *aaabbb, void **txset_info, char **gpu_txs, void **output)
+void Bench(ProgramInfo *aaabbb, void **txset_info, char **gpu_txs, void **output)
 {
     common::ConcurrencyControlCPUBase *cc = aaabbb->cc;
     common::RTCProgram *program = aaabbb->program;
@@ -534,23 +534,23 @@ int main(int argc, char **argv)
     std::cout << "TRY " << argv[4] << "," << valid_txn_bitoffset << "," << warp_cnt << "," << batch_size << "\n";
     // std::cout << "GPUDB SIZE " << db_size << " " << db_size * 1.0f / (1024.0 * 1024.0) << "\n";
 
-    AAA000 *aaa000 = nullptr;
+    TaskInfo *task_info = nullptr;
 
     if (isno)
     {
         bench_name = "new_order";
-        aaa000 = NewOrderPre0();
+        task_info = NewOrderPre0();
     }
     else
     {
         bench_name = "payment";
-        aaa000 = PaymentPre0();
+        task_info = PaymentPre0();
     }
 
-    exec_info = new common::ExecInfo(name, aaa000->txinfo, txcnt, argv[4],
+    exec_info = new common::ExecInfo(name, task_info->txinfo, txcnt, argv[4],
                                      valid_txn_bitoffset, warp_cnt, batch_size, debug);
 
-    AAAABBB *aaaabbb1 = Pre(aaa000);
+    ProgramInfo *program_info = Pre(task_info);
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -559,8 +559,8 @@ int main(int argc, char **argv)
     cudaEventCreate(&mid1);
     cudaEventCreate(&stop1);
     cudaEventRecord(start);
-    void *txset_info = ((common::DynamicTransactionSet_CPU *)(aaa000->txinfo))->ToGPU();
-    Bench(aaaabbb1, &txset_info, &(aaa000->gpu_txs), &(aaa000->output));
+    void *txset_info = ((common::DynamicTransactionSet_CPU *)(task_info->txinfo))->ToGPU();
+    Bench(program_info, &txset_info, &(task_info->gpu_txs), &(task_info->output));
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -572,7 +572,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-AAA000 *PaymentPre0()
+TaskInfo *PaymentPre0()
 {
     common::StaticTransactionSet_CPU *txinfo = new common::StaticTransactionSet_CPU(txcnt, &payment_struct_type, &db);
 
@@ -635,10 +635,10 @@ AAA000 *PaymentPre0()
     void *output;
     cudaMalloc(&output, sizeof(PaymentOutput) * txcnt);
 
-    return new AAA000(txinfo, gpu_txs, gpu_txs, output);
+    return new TaskInfo(txinfo, gpu_txs, gpu_txs, output);
 }
 
-AAA000 *NewOrderPre0()
+TaskInfo *NewOrderPre0()
 {
     std::vector<int> rcnts(txcnt);
     std::vector<int> wcnts(txcnt);
@@ -712,5 +712,5 @@ AAA000 *NewOrderPre0()
     void *output;
     cudaMalloc(&output, sizeof(NewOrderOutput) * txcnt);
 
-    return new AAA000(txinfo, gpu_txs, gpu_gaccotxs, output);
+    return new TaskInfo(txinfo, gpu_txs, gpu_gaccotxs, output);
 }
