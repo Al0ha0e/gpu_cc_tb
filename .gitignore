@@ -1,0 +1,8 @@
+*.exe
+*.lib
+*.exp
+*.txs
+.vscode
+out
+dataset
+tables/
